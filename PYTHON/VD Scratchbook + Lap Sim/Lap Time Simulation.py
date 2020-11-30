@@ -21,28 +21,35 @@ Coordinate Systems:
 """
 
 "Library Imports"
-import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import simplified_Power as smp
+import simplified_Aero as sma
+#import Simplified_K as smk
+#import simplified_Tire as smt
 
 "Global Simulation Parameters"
-time_step_limit=10000000       #Maximum number of time discrete steps
-time_step_global=0.05       #global time step for time descritized lap sim
-time=np.array([0.0]*time_step_limit)                     #time list to track following parameters [0, 0.05, 0.10 ... , time_step_limit*time_step_global]
-velocity_u=np.array([0.0]*time_step_limit)               #longitudinal velocity in X direction list to track during simulation
-velocity_y=np.array([0.0]*time_step_limit)               #lateral velocity in Y direction list to track during simulation
-velocity_w=np.array([0.0]*time_step_limit)               #heaving velocity in Z direction list to track during simulation
-acceleration_u=np.array([0.0]*time_step_limit)           #longitudinal acceleration in X direction list~
-acceleration_y=np.array([0.0]*time_step_limit)           #lateral acceleration in Y direction ~ 
-acceleration_w=np.array([0.0]*time_step_limit)           #heave acceleration in Z~
-yaw_rate=np.array([0.0]*time_step_limit)                #yaw rate about Z~
-roll_rate=np.array([0.0]*time_step_limit)                #roll rate about X~
-pitch_rate=np.array([0.0]*time_step_limit)               #pitch rate about Y~
-moment_yaw=np.array([0.0]*time_step_limit)               #yawing moment about Z
-moment_roll=np.array([0.0]*time_step_limit)              #roll couple about X
-moment_pitch=np.array([0.0]*time_step_limit)             #pitching couple about Y
+time_step_limit=1000000       #Maximum number of time discrete steps
+time_step_global=0.025       #global time step for time descritized lap sim
+
+time=np.zeros(time_step_limit)                   #time list to track following parameters [0, 0.05, 0.10 ... , time_step_limit*time_step_global]
+velocity_u=np.zeros(time_step_limit)               #longitudinal velocity in X direction list to track during simulation
+velocity_y=np.zeros(time_step_limit)               #lateral velocity in Y direction list to track during simulation
+velocity_w=np.zeros(time_step_limit)               #heaving velocity in Z direction list to track during simulation
+acceleration_u=np.zeros(time_step_limit)           #longitudinal acceleration in X direction list~
+acceleration_y=np.zeros(time_step_limit)           #lateral acceleration in Y direction ~ 
+acceleration_w=np.zeros(time_step_limit)           #heave acceleration in Z~
+yaw_rate=np.zeros(time_step_limit)                #yaw rate about Z~
+roll_rate=np.zeros(time_step_limit)                #roll rate about X~
+pitch_rate=np.zeros(time_step_limit)               #pitch rate about Y~
+moment_yaw=np.zeros(time_step_limit)               #yawing moment about Z
+moment_roll=np.zeros(time_step_limit)              #roll couple about X
+moment_pitch=np.zeros(time_step_limit)             #pitching couple about Y
+
+i=0
+j=0
+k=0
 
 "Global Environment Parameters (SI)"
 g=9.81;         "Gravity (m/s**2)"
@@ -51,7 +58,7 @@ rho_air=1.2754;        "Density of Air (kg/m**3)"
 "DRIVER FUDGE FACTORS"
 factor_fudge_brake = 0.95   #Braking fudge factor. Driver does not brake to the limit. On average can hit this percentage of optimal braking
 factor_fudge_steering = 0.95 #Steering fudge factor. Driver does not steer at the limit. On average can hit this percentage of optinal steady state cornering
-shift_fudge_factor=1     #Shift a percentage amount before peak torque of the next gear
+shift_fudge_factor=1.25     #Shift a percentage amount before peak torque of the next gear
 
 "Vehicle Mass-Moment Parameters"
 m_V= 340;       "vehicle mass"
@@ -66,12 +73,7 @@ cgh= 0.282; "Center of gravity height"
 l = 2;       "Wheelbase"
 
 "Powertrain Gearing Parameters"
-gear_ratio_list=[2.68, 2.05, 1.71, 1.5, 1.36, 1.23];         "Gear ratio list"
-gear_ratio=np.array(gear_ratio_list)                      #Reclass gear ratio list as numpy array
-primary_ratio=1.60;                                          "Crank->trans ratio"                
-final_ratio=2.41;                                         "Chain drive ratio"
 tire_OD=0.508;                                               "Tire Outer Diameter (m)"
-drive_ratio=final_ratio*primary_ratio                       #Overrall powertrain ratio
 
 "In-wheel brake parameters"
 area_piston_front=3.0*0.00064516;                      "Front Caliper piston area, in^2 -> m**2"
@@ -122,170 +124,18 @@ z_CoP = 21;                     "Center of pressure location along Y originating
 z_frontsquat = 0;
 z_rearsquat = 0;
 
-""""PLOTTING SIMPLE LONGITUDINAL DOWNFORCE AND DRAG - ASSUMING RIGID BODY AERO - NO AEROELASTICITY"""
-u_local=np.linspace(0,60)
-Downforce_local=0.5*(rho_air)*(Area_Reference_SI)*C_L*u_local**2
-Drag_local=0.5*(rho_air)*(Area_Reference_SI)*C_D*u_local**2
-
-plt.plot(u_local,Downforce_local, label='Downforce (N)')
-plt.plot(u_local,Drag_local, label='Drag (N)')
-plt.title('0 DOF LONGITUDINAL TRAVEL DRAG & DOWNFORCE')
-plt.ylabel('Magnitude ()')
-plt.xlabel('Longitudinal Speed (m/s)')
-plt.legend()
-plt.show()
-
 #***************************************************************************************************************#
 #***************************************************************************************************************#
-"PANDAS IMPORT: SPREADSHEET DATAS"
+"PANDAS IMPORT: SPREADSHEET DATA"
 print("Solving: Pandas Imports")
 #***************************************************************************************************************#
 #***************************************************************************************************************#
 mu_long=1.60
-camber_cases=5                                                            #camber data set quantity
-load_cases=3                                                                #load data set quantity
-i=0
-j=0
-k=0
-slip_angles_local=[0]*29                                                                        #Declare an empty 2D array: slip angles matrix for 29 discrete slip angles
-lateral_force_local=np.array([[0]*29]*camber_cases,float)                                     #Declare an empty 2D array: lat forces matrix for 29 discrete lat forces, 4 cambers
 
-ellipsedata_longitudinal_force=np.array=5
-"ellipsedata_lateral_force=np.array([[0]*28]*load_cases,float) "                                #Declare an empty 2D array: lat forces matrix for 28 discrete lat forces, 4 slip angles
-"Import Track Data to Panda data Matrix"
-trackdata = pd.read_excel('Track_Data.xlsx');
+trackdata = pd.read_excel('Import Data/Track_Data.xlsx',0,convert_float=True,skiprows=0);
 trackdatamatrix = trackdata.to_numpy();
 
-"Import Powertrain Data to Panda database Matrix"
-
-powerdata = pd.read_excel('Powertrain_Data.xlsx', sheet_name='K5 GSXR1000 + GT1749');  #Import Engine Dyno Data to Pandas Database
-powerdatamatrix = powerdata.to_numpy();                                             #Convert panda database to numpy array
-
 #***************************************************************************************************************#
-#***************************************************************************************************************#
-"POWERTRAIN SOLVER" 
-"""Import raw dyno data. Produce polynomial model of engine and transmission curves"""
-print("Solving: Powertrain")
-#***************************************************************************************************************#
-#***************************************************************************************************************#
-
-dyno_torque = powerdatamatrix[6,1:12];                  "Append Engine torque row to 1D list (Nm)"
-dyno_rpm_list = powerdatamatrix[5,1:12];                      "Append Engine speed row to 1D list (rev/min)"
-dyno_rpm= np.array(dyno_rpm_list,float)
-dyno_power = dyno_rpm*dyno_torque/9.5488/1000;          "Compute Engine Power (KW)"
-
-plt.plot(dyno_rpm,dyno_power, label='Engine Power (KW)');    "Plot simdyno results"
-plt.plot(dyno_rpm,dyno_torque, label='Engine Torque (NM)');  "plot y: torque"
-plt.title('GSXR1000 TURBO GT1749 DYNO')
-plt.ylabel('Magnitude ()')
-plt.xlabel('Engine Speed (rev/s)')
-plt.legend()
-plt.show()
-
-"While Loop for wheel torque and speed"
-current_gear=0
-dyno_wheel_torque = np.array([[0]*dyno_rpm.size]*gear_ratio.size);  "Declare empty 2D array for wheel torques at wheel speed of (rpm size columns)x(gear ratio size rows)"        
-dyno_wheel_speed = np.array([[0]*dyno_rpm.size]*gear_ratio.size); "Declare empty 2D list  for wheel speeds ~~"
-
-Torque_polynomial_degree=3                                          #Torque-speed polynomial degree
-
-dyno_peak_torque=[];                                                   #Declare empty peak torque list
-speed_torque_poly=np.array([[0]*(Torque_polynomial_degree+1)]*gear_ratio.size,float);            #Declare empty array of 6 degree polynomials for gears 1-6
-speed_torque_function=[0]*gear_ratio.size                              #Declare empty list for poly1d array for speed-torque equations at different gears
-
-rpm_torque_poly=np.array([[0]*(Torque_polynomial_degree+1)]*gear_ratio.size,float)                      #                rpm-tq array for polymial
-rpm_speed_poly=np.array([[0]*(Torque_polynomial_degree+1)]*gear_ratio.size,float)                        #                rpm-u array for polynomial
-
-"""ENGINE & TRANSMISSION SOLVER"""
-while current_gear < 6:                                                                     #Powertrain Solver
-    dyno_wheel_torque[current_gear]=dyno_torque*gear_ratio[current_gear]*drive_ratio*1.0;    "Compute Axle/Wheel Torque, parse  to wheel tq array"
-    dyno_wheel_speed[current_gear]=(dyno_rpm/60.0)*(2*np.pi)/(gear_ratio[current_gear]*drive_ratio)*(tire_OD/2); "Compute Wheel Speed, parse to wheel speed array"
-    
-    speed_torque_poly[current_gear]=np.polyfit(                                                         #Generate degree 8 polynomial coefficients to speed-tq curve
-        (dyno_wheel_speed[current_gear]),
-        (dyno_wheel_torque[current_gear]),
-        Torque_polynomial_degree)
-    
-    speed_torque_function[current_gear]= np.poly1d(speed_torque_poly[current_gear])                    #Generate degree 8 polynomial function from polyfit coefficients
-    
-    rpm_torque_poly[current_gear]=np.polyfit(                                                       #Generate polynomial for rpm-tq
-        dyno_rpm,dyno_wheel_torque[current_gear],Torque_polynomial_degree)
-    rpm_speed_poly[current_gear]=np.polyfit(                                                        #Generate polynomial for rpm-speed
-        dyno_rpm,dyno_wheel_speed[current_gear],Torque_polynomial_degree)
-    plt.plot(dyno_wheel_speed[current_gear],dyno_wheel_torque[current_gear], label=("Gear: ", current_gear+1));    "Plot simdyno results: wheel torque at wheel speed"
-    
-    current_gear+=1;                                                                "Increment gear"  
-    print("Solving powertrain gear:", current_gear)
-    
-plt.title('WHEEL TORQUE VS. TANGENTIAL SPEED ')
-plt.ylabel('Torque (NM)')                               #Display Speed-Torque Curves
-plt.xlabel('Wheel Tangential Speed (m/s)')
-axes = plt.gca()
-axes.set_ylim([0,2000])
-plt.legend()
-plt.show()
-
-
-"""PLOTTING POLYNOMIAl TQ vs U"""
-current_gear=0
-while current_gear < 6:
-    p = speed_torque_function[current_gear]
-    x = dyno_wheel_speed[current_gear]
-    y = p(x)
-    plt.plot(x, y,label=("Gear: ", current_gear+1))
-    current_gear+=1;                                                                "Increment gear"  
-axes = plt.gca()
-axes.set_ylim([0,2000])
-plt.title('WHEEL TORQUE VS. TANGENTIAL SPEED (POLYFIT)')
-plt.ylabel('Torque (NM)')                               #Display Speed-Torque Curves
-plt.xlabel('Wheel Tangential Speed (m/s)')
-plt.legend()
-plt.show()
-
-#***************************************************************************************************************#
-#***************************************************************************************************************#
-"SHIFT LOGIC SOLVER" 
-
-"""Determines the shift logic. Attempt to remain in domain of peak torque"""
-print("Solving: shift logic")
-#***************************************************************************************************************#
-#***************************************************************************************************************#
-speed_torque_derived=[0]*gear_ratio.size                               #Derived speed torque f'n
-tqroots=[0]*gear_ratio.size 
-shift_points=[0]*gear_ratio.size 
-
-current_gear=0
-while current_gear < 6:
-    speed_torque_derived[current_gear]  =np.polyder(speed_torque_function[current_gear],m=1)            #Derive Tq-speed polynomials dTQ/dU, m=degrees of derivation
-    tqroots[current_gear]=np.roots(speed_torque_derived[current_gear])
-    
-    shift_points[current_gear]= tqroots[current_gear][0]*shift_fudge_factor         #append the 1st (0th index) root of the tqroots function to the shift points array
-    current_gear+=1;   
-    
-"""PLOTTING POLYNOMIAl dTQ/dU vs U"""
-current_gear=0
-while current_gear < 6:
-    p= speed_torque_derived[current_gear]
-    x = dyno_wheel_speed[current_gear]
-    y = p(x)
-    plt.plot(x, y,label=("Gear: ", current_gear+1))
-    current_gear+=1;                                                                "Increment gear"  
-
-plt.grid(b=True, which='major', axis='both')
-plt.title('dTQ/dU VS. TANGENTIAL SPEED (POLYFIT)')
-plt.xlabel('Wheel Tangential Speed (m/s)')
-plt.legend()
-plt.show()
-def downforce_solver(u):
-    "Given an input velocity, computes and returns the downforce (N) for longitudinal velocity"
-    downforce_local = 0.5*(rho_air)*(Area_Reference_SI)*C_L*u**2;    "Downforce (N) = 1/2*Fluid Density*Reference Area*Lift*Velocity^2"
-    return downforce_local
-def drag_solver(u):
-    "Given an input velocity, computes and returns drag (N) for longitudinal velocity"
-    drag_local=-0.5*(rho_air)*(Area_Reference_SI)*C_D*u**2;   "Downforce (N) = 1/2*Fluid Density*Reference Area*Lift*Velocity^2"
-    return drag_local
-
-
 def brake_pedal_force_solver_front(force_tractive):
     "Determines the required force applied to the pedal to achieve peak deceleration (friction limit) based"
     "Input: tire tractive force"
@@ -299,44 +149,6 @@ def brake_pedal_force_solver_front(force_tractive):
     
     force_pedal=force_MC*l_of/l_pedal*np.cos(l_of/l_mc*(np.pi-pedal_angle_rad))         #FBD Solved relation between pedal force and force at th
     return force_pedal
-
-"""PIECEWISE FUNCTION RETURNS TQ BASED ON SHIFT POINTS"""
-def Wheel_force_solver(u):
-    "Computes wheel torque, engine speed, current gear"
-    if (0<= u) & (u < shift_points[0]):                                                             #1st gear domain, traction limited
-        gear=0                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif (shift_points[0]<= u) & (u < shift_points[1]):                                              #2nd gear domain 
-        gear=1                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif (shift_points[1]<= u) & (u < shift_points[2]):     #3rd gear domain
-        gear=2                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif (shift_points[2]<= u) & (u < shift_points[3]):     #4th gear domain
-        gear=3                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif (shift_points[3]<= u) & (u < shift_points[4]):     #5th gear domain
-        gear=4                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif (shift_points[4]<= u):                             #6th gear domain
-        gear=5                                                                                      #current gear
-        wheel_torque = speed_torque_function[gear](u)/(tire_OD/2)                                   #wheel torque
-        engine_speed = u*(gear_ratio[gear]*drive_ratio)/(tire_OD/2)                                 #engine speed
-        return [wheel_torque,engine_speed,gear]                                                     #1st gear torque,rpm,gear
-    elif u < 0:
-        return print("ERROR, NEGATIVE VELOCITY")
-    else:
-        return print("ERROR, INVALID VELOCITY")
     
 #***************************************************************************************************************#
 #***************************************************************************************************************#
@@ -352,12 +164,12 @@ def brake_distance_solver (u1,u2):
     t_step_local=0.01;  #deckare time step size
     distance=0;
     while u2<u_instantaneous:
-        Force_y_local=weight_system + downforce_solver(u_instantaneous)     #Sum of forces Y
-        Force_x_local=-mu_long*Force_y_local + drag_solver(u_instantaneous)         #Sum of forces X
+        Force_y_local=weight_system + sma.downforce_solver(u_instantaneous)     #Sum of forces Y
+        Force_x_local=-mu_long*Force_y_local + sma.drag_solver(u_instantaneous)         #Sum of forces X
         
         a_local= Force_x_local/m_S*factor_fudge_brake                               #Deceleration due of sum of forces X, '
     
-        u_instantaneous=u_instantaneous+t_step_local*a_local                        #recompute velocity
+        u_instantaneous=u_instantaneous+t_step_local*a_local           #recompute velocity
         distance= distance+ u_instantaneous*t_step_local              #sum braking distance
         
     
@@ -368,7 +180,7 @@ def brake_state_solver(u1,u2,time_step,distance_remaining,driving_state):
     "Refines time step size to increase brake logic accuracy"
     "Initiate state change from state 0 to state 1"
     
-    projected_distance= brake_distance_solver(u1,u2)
+    projected_distance= brake_distance_solver(u1,u2)                                            #project the distance to reach u2 from u1
     percent_difference = np.abs(projected_distance-distance_remaining)/distance_remaining       #check percentage difference between current distance left and projected brake distance
     print("Percentage difference in braking:",percent_difference)
     if percent_difference > 0.10:
@@ -383,37 +195,12 @@ def brake_state_solver(u1,u2,time_step,distance_remaining,driving_state):
         time_step = time_step_global    #return the time step size to the global size
         return [driving_state,time_step]
 
-"Import tire data: AVON 180/550/13"
-def Tire_data_import():
-    "Digests raw excel data into organized arrays: Slip angles, Lateral Forces, Camber cases"
-    load_cases=3  
-    tiredata_100kg = np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 2));  #Import CF vs SA data 100kg
-    tiredata_200kg = np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 3));  #Import CF vs SA data 200kg
-    tiredata_300kg = np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 4));  #Import CF vs SA data 300kg
-    ellipse_data_100kg= np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 5));  #Import CF vs LF data 100kg
-    ellipse_data_200kg= np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 6));  #Import CF vs LF data 200kg
-    ellipse_data_300kg= np.array(pd.read_excel(r"G:\My Drive\The Race Car Project\Tire Data\Club F3 (AVON)\STAB RIG RAW DATA (1).XLS", 7));  #Import CF vs LF data 300kg
-    
-    shape_A=np.shape(tiredata_180_550_13_avon_100kg)    #Pull the array shape of the SA vs CF data
-    shape_B=np.shape(ellipse_data_100kg)                #Pull the array shape of the CF vs LF data
-    
-    tiredata=[shape_A]*load_cases                       #Declare an empty 3D array for SA vs CF data for each load case
-    ellipsedata=[shape_B]*load_cases                    #Declare an empty 3d array for CF vs LF data for each load case
-    
-    tiredata[0],tiredata[1],tiredata[2]=tiredata_100kg,tiredata_200kg,tiredata_300kg                            #Appends SA vs CF data from Pandas import to 3d Array
-    ellipsedata[0],ellipsedata[1],ellipsedata[2]=ellipse_data_100kg,ellipse_data_200kg,ellipse_data_300kg       #Appends CF vs LF data from Pandas import to 3d Array
-    
-    return(tiredata,ellipsedata)
-
-tiredata_180_550_13_avon_100kg, ellipsedata= Tire_data_import()
-
-
 def print_function(time,u,v,w,A_x,A_y,A_z,yaw,roll,pitch,M_z,M_x,M_y):
     "Print Data"
     print("_____________________________")
     print("STATE: BRAKING FWD")
-    print("Drag:", drag_solver(u))
-    print("Downforce:", downforce_solver(u))
+    print("Drag:", sma.drag_solver(u))
+    print("Downforce:", sma.downforce_solver(u))
     print("Fy,",Fy_local)
     print("Current Longitudinal Acceleration: ", A_x*t_step ,"m/s**2")
     print("Current Velocity: ", u,"m/s")
@@ -422,7 +209,20 @@ def print_function(time,u,v,w,A_x,A_y,A_z,yaw,roll,pitch,M_z,M_x,M_y):
     print("Distance Remaining in Segment: ", length_remaining)
     print("Projected Braking Distance: ", brake_distance_solver(u,u_2))
 
-class wheel_solver:         #Tracks wheel properties
+class wheel_front_left:         #Tracks wheel properties
+    def force_vertical(a):
+        weight_transfer_longitudinal=0
+        return weight_transfer_longitudinal
+    def camber_solver():
+        "Optimum K solved suspension parameters: "
+        "Camber as function of vertical displacement"
+        "Camber as function of roll (degrees)"
+    def kpi_jacking_solver():
+        "Computes front wheel kpi jacking force and dislacement"
+    def IC_jacking_solver():
+        "Computes vertical jacking force on body as function of lateral force"
+
+class wheel_front_right:         #Tracks wheel properties
     def force_vertical(a):
         weight_transfer_longitudinal=0
         return weight_transfer_longitudinal
@@ -435,69 +235,46 @@ class wheel_solver:         #Tracks wheel properties
     def IC_jacking_solver():
         "Computes vertical jacking force on body as function of lateral force"
     
+class wheel_rear_left:         #Tracks wheel properties
+    def force_vertical(a):
+        weight_transfer_longitudinal=0
+        return weight_transfer_longitudinal
+    def camber_solver():
+        "Optimum K solved suspension parameters: "
+        "Camber as function of vertical displacement"
+        "Camber as function of roll (degrees)"
+    def kpi_jacking_solver():
+        "Computes front wheel kpi jacking force and dislacement"
+    def IC_jacking_solver():
+        "Computes vertical jacking force on body as function of lateral force"
 
-#***************************************************************************************************************#
-#***************************************************************************************************************#
-"TIRE DATA SOLVER"
-print("Solving: Tires")
-#***************************************************************************************************************#
-#***************************************************************************************************************#
-
-
-"Single vertical load, CF vs SA at camber sweeped"
-while(i != camber_cases):
-    "Places"
-    slip_angles_local=tiredata_180_550_13_avon_100kg[0][2:31,0]      #Append excel slip angle data to slip angle matrix
-    lateral_force_local[i]=tiredata_180_550_13_avon_100kg[0][2:31,j+2]*1000    #Append excel force data to lat force matrix
+class wheel_rear_right:         #Tracks wheel properties
+    def force_vertical(a):
+        weight_transfer_longitudinal=0
+        return weight_transfer_longitudinal
+    def camber_solver():
+        "Optimum K solved suspension parameters: "
+        "Camber as function of vertical displacement"
+        "Camber as function of roll (degrees)"
+    def kpi_jacking_solver():
+        "Computes front wheel kpi jacking force and dislacement"
+    def IC_jacking_solver():
+        "Computes vertical jacking force on body as function of lateral force"
     
-    plt.plot(slip_angles_local,lateral_force_local[i], label=('Camber: ', i))
+class chassis_orientation:         #Tracks wheel properties
+    def force_vertical(a):
+        weight_transfer_longitudinal=0
+        return weight_transfer_longitudinal
+    def camber_solver():
+        "Optimum K solved suspension parameters: "
+        "Camber as function of vertical displacement"
+        "Camber as function of roll (degrees)"
+    def kpi_jacking_solver():
+        "Computes front wheel kpi jacking force and dislacement"
+    def IC_jacking_solver():
+        "Computes vertical jacking force on body as function of lateral force"
 
-    j+=2                                                                #Load increment    
-    i+=1                                                                #Incrememnt camber cases
-
-plt.title('CF vs SA, Camber Sweep')
-plt.ylabel('Force (N)')
-plt.xlabel('Slip angle (deg)')
-plt.legend()
-plt.show()
-
-"PLOT CF vs SLIP ANGLES, sweep for FY"
-i=0
-j=0
-lateral_force=[[0]*28]*load_cases
-
-lateral_force[i]=tiredata_180_550_13_avon_100kg[0][2:31,2]*1000    #Append excel force data to lat force matrix
-lateral_force[i+1]=tiredata_180_550_13_avon_100kg[1][2:31,2]*1000    #Append excel force data to lat force matrix
-lateral_force[i+2]=tiredata_180_550_13_avon_100kg[2][2:31,2]*1000    #Append excel force data to lat force matrix
-plt.plot(slip_angles_local,lateral_force[i], label=('Load: 100kg'), linestyle='', marker='o')
-plt.plot(slip_angles_local,lateral_force[i+1], label=('Load: 200kg'), linestyle='', marker='o')
-plt.plot(slip_angles_local,lateral_force[i+2], label=('Load: 300kg'), linestyle='', marker='o')
-
-plt.grid(b=True, which='major', axis='both')
-plt.title('CF vs SA, 0 Camber, Mass Sweep')
-plt.ylabel('Force (N)')
-plt.xlabel('Slip angle (deg)')
-plt.legend()
-plt.show()
-
-"PLOT CF (Gs) vs SLIP ANGLES, sweep for FY"
-plt.plot(slip_angles_local,lateral_force[i]/100/g, label=('Load: 100kg'), linestyle='', marker='o')
-plt.plot(slip_angles_local,lateral_force[i+1]/200/g, label=('Load: 200kg'), linestyle='', marker='o')
-plt.plot(slip_angles_local,lateral_force[i+2]/300/g, label=('Load: 300kg'), linestyle='', marker='o')
-                                                  #Incrememnt camber cases
-plt.grid(b=True, which='major', axis='both')
-plt.title('Accel (Gs)vs SA, 0 Camber, Mass Sweep')
-axes = plt.gca()
-axes.set_ylim([-2.5,2.5])
-plt.ylabel('Acceleration (G) ')
-plt.xlabel('Slip angle (deg)')
-plt.legend()
-plt.show()
-
-"PLOT Friction Elipses"
 #***************************************************************************************************************#
-#***************************************************************************************************************#
-"STATIC TRACTIVE LIMITS"
 
 "TBH, this is kind of useless. Static, steaty state assumptions. No drag"
 #***************************************************************************************************************#
@@ -506,15 +283,15 @@ plt.show()
 """Printing Wheel Force - Aero grip limit plot"""
 current_gear=0
 while current_gear < 6: 
-    p = speed_torque_function[current_gear]/(tire_OD/2) 
-    x = dyno_wheel_speed[current_gear]
+    p = smp.speed_torque_function[current_gear]/(tire_OD/2) 
+    x = smp.dyno_wheel_speed[current_gear]
     y = p(x)
     plt.plot(x, y,label=("Gear: ", current_gear+1))
     current_gear+=1;                                                                "Increment gear"  
 
-Downforce=0.5*(rho_air)*(Area_Reference_SI)*C_L*dyno_wheel_speed[5]**2    #Compute Downforce Curve
+Downforce=0.5*(rho_air)*(Area_Reference_SI)*C_L*smp.dyno_wheel_speed[5]**2    #Compute Downforce Curve
 Longitudinal_limit_grip = mu_long*(weight_system+Downforce*0.5)*(1-r_FR)
-plt.plot(dyno_wheel_speed[5],Longitudinal_limit_grip, label='Limit Grip (N)')  #Plot Longitudinal_limit_grip
+plt.plot(smp.dyno_wheel_speed[5],Longitudinal_limit_grip, label='Limit Grip (N)')  #Plot Longitudinal_limit_grip
 plt.title('WHEEL FORCE & LONGITUDINAL LIMIT GRIP ')
 plt.ylabel('Force (N)')                               #Display Speed-Torque Curves
 plt.xlabel('Wheel Tangential Speed (m/s)')
@@ -523,6 +300,17 @@ axes = plt.gca()
 axes.set_ylim([0,8000])
 plt.legend()
 plt.show()
+
+
+
+
+
+
+
+
+
+
+
 
 
 #***************************************************************************************************************#
@@ -572,7 +360,7 @@ t_step=0.05;                            "time steps (s)"
 linear_length=[];            "linear length of the ith track segment"
 
 weight_transfer_longitudinal=0
-wheel_force = speed_torque_function[0](u)/(tire_OD/2) #Current Potential Wheel Force
+wheel_force = smp.speed_torque_function[0](u)/(tire_OD/2) #Current Potential Wheel Force
 F_long_limit = mu_long*weight_system
 #***************************************************************************************************************#
 "State 3 Solver"
@@ -586,15 +374,15 @@ length_segment=trackdatamatrix[0,3]
 state=0
 while state==0:                                           #State 0
     
-    wheel_force,engine_speed,current_gear = Wheel_force_solver(u) #Current Potential Wheel Force
+    wheel_force,engine_speed,current_gear = smp.Wheel_force_solver(u) #Current Potential Wheel Force
                             
-    Fy_local=weight_system*(1-r_FR) + weight_transfer_longitudinal + downforce_solver(u)              #Sum of Forces in the Y Direction on the driven wheels (N)
+    Fy_local=weight_system*(1-r_FR) + weight_transfer_longitudinal + sma.downforce_solver(u)              #Sum of Forces in the Y Direction on the driven wheels (N)
     F_long_limit = mu_long*Fy_local                          #Compute Longitudinal acceleration limit (m*s**-2)
     
     if (wheel_force<F_long_limit)&(u<20):
-        Fx_local=F_long_limit + drag_solver(u) #Sum of Forces in the X Direction (N)
+        Fx_local=F_long_limit + sma.drag_solver(u) #Sum of Forces in the X Direction (N)
     else:
-        Fx_local=wheel_force + drag_solver(u) #Sum of Forces in the X Direction (N)
+        Fx_local=wheel_force + sma.drag_solver(u) #Sum of Forces in the X Direction (N)
     
     A_x=np.abs(Fx_local/m_S)                                          #Acceleration is the limit grip - Drag
     weight_transfer_longitudinal = m_S*A_x*cgh/l                #Weight transfer solve
@@ -605,15 +393,15 @@ while state==0:                                           #State 0
     
     print("_____________________________")
     print("STATE: ACCEL FWD")
-    print("Drag:", drag_solver(u))
-    print("Downforce:", downforce_solver(u))
+    print("Drag:", sma.drag_solver(u))
+    print("Downforce:", sma.downforce_solver(u))
     print("Fy,",Fy_local)
     print("Current Longitudinal Acceleration: ", A_x*t_step ,"m/s**2")
     print("Current Velocity: ", u,"m/s")
     """print("Current Wheel Force: ", wheel_force,"N")
     print("Current Force Limit: ", F_long_limit,"N")
     print("Long Weight Transfer: ", weight_transfer_longitudinal)"""
-    print("Time Elapsed to 100km/h: ", t,"seconds")
+    print("Time Elapsed: ", t,"seconds")
     print("Distance Elapsed: ", distance)
     print("Distance Remaining in Segment: ", length_remaining)
     print("Projected Braking Distance: ", brake_distance_solver(u,u_2))
@@ -638,7 +426,7 @@ while state==0:                                           #State 0
 
     "Plot Data"
     i+=1
-    
+    """
 while state==1:
     
     Fy_local=weight_system + downforce_solver(u)              #Sum of Forces in the Y Direction on the driven wheels (N)
@@ -688,7 +476,7 @@ while state==1:
 
     "Plot Data"
     i+=1
- 
+ """
 
 i-=1
 plt.plot(time[0:i],velocity_u[0:i],label=('Speed'))
@@ -698,7 +486,7 @@ plt.xlabel('Time (s)')
 
 plt.plot(time[0:i],acceleration_u[0:i],label=('Acceleration'))
 plt.title('Time vs. Acceleration')
-plt.ylabel('Acceleration (m/s*-2)')                                #Display Speed-Torque Curves
+plt.ylabel('Magnitude')                                #Display Speed-Torque Curves
 plt.xlabel('Time (s)')
 
 plt.savefig('tessstttyyy.png', dpi=100)
@@ -784,8 +572,3 @@ natural_frequency = np.sqrt(
 #
 
 
-
-
-"""
-root.mainloop();    "GUI Run Loop"
-"""
