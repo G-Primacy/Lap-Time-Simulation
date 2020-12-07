@@ -13,6 +13,8 @@ Complete:
 -Simplified suspension kinematics
 -Simplified drag & downforce models
 -Simplified drag & downforce yaw models
+-Full track solver from raw GPS coords to usable track segments
+-Pacejka 2002 slip models for longitudinal, lateral, and alignment forces
 
 To do:
 -Efficiency and power consumption
